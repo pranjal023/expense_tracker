@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard • Expense Tracker</title>
+  <link rel="stylesheet" href="./css/style.css" />
+  <script defer src="./js/config.js"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+  <script type="module" src="./js/dashboard.js"></script>
+</head>
+<body class="container">
+  <header class="row space-between">
+    <h1>Expense Tracker</h1>
+    <div class="row gap">
+      <span id="userBadge" class="badge">Free</span>
+      <button id="btnUpgrade">Go Premium</button>
+      <button id="btnExport" disabled>Export CSV</button>
+      <button id="btnLogout">Logout</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Add / Edit Expense</h2>
+      <form id="expenseForm">
+        <input type="hidden" id="expenseId" />
+        <label>Description</label>
+        <input type="text" id="description" required />
+        <label>Category</label>
+        <input type="text" id="category" required />
+        <label>Amount</label>
+        <input type="number" id="amount" step="0.01" min="0" required />
+        <label>Date</label>
+        <input type="date" id="date" required />
+        <div class="row">
+          <button type="submit">Save</button>
+          <button type="button" id="btnClear">Clear</button>
+        </div>
+      </form>
+      <p id="formMsg" class="msg"></p>
+    </section>
+
+    <section class="card">
+      <h2>Expenses</h2>
+      <div class="row space-between">
+        <div>
+          <label>Per page:</label>
+          <select id="perPage">
+            <option>5</option>
+            <option selected>10</option>
+            <option>20</option>
+          </select>
+        </div>
+        <div id="pagination" class="row gap"></div>
+      </div>
+      <table id="expenseTable">
+        <thead>
+          <tr>
+            <th>Description</th><th>Category</th><th>Amount</th><th>Date</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="row space-between">
+        <div></div>
+        <div id="paginationBottom" class="row gap"></div>
+      </div>
+    </section>
+
+    <section class="card" id="leaderboardSection">
+      <h2>Top 5 Spenders</h2>
+      <ol id="leaderboard"></ol>
+    </section>
+  </main>
+</body>
+</html>

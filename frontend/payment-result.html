@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment Result • Expense Tracker</title>
+  <link rel="stylesheet" href="./css/style.css" />
+  <script defer src="./js/config.js"></script>
+  <script defer>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const orderId = params.get('order_id');
+      const msg = document.getElementById('resultMsg');
+      if (!orderId) {
+        msg.textContent = 'Missing order id.';
+        return;
+      }
+      try {
+        const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/subscription/status?order_id=' + encodeURIComponent(orderId), {
+          credentials: 'omit'
+        });
+        const data = await res.json();
+       if (data.success && data.status === 'PAID') {
+  msg.textContent = 'Payment successful! Your account is now premium.';
+  localStorage.setItem('isPremium', '1');   
+  setTimeout(() => { window.location.href = './dashboard.html'; }, 1000);
+} else if (data.success) {
+          msg.textContent = 'Payment status: ' + data.status;
+        } else {
+          msg.textContent = 'Payment check failed: ' + (data.message || 'Unknown error');
+        }
+      } catch (e) {
+        msg.textContent = 'Error fetching payment status.';
+      }
+    });
+  </script>
+</head>
+<body class="container">
+  <div class="card">
+    <h1>Payment result</h1>
+    <p id="resultMsg" class="msg"></p>
+    <div class="row">
+      <a href="./dashboard.html">Go to dashboard</a>
+    </div>
+  </div>
+</body>
+</html>
