@@ -2,95 +2,138 @@ import { authHeader, requireAuth, setUserBadge } from './util.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   requireAuth();
-  const btnLogout = document.getElementById('btnLogout');
-  const btnExport = document.getElementById('btnExport');
+
+  const btnLogout  = document.getElementById('btnLogout');
+  const btnExport  = document.getElementById('btnExport');
   const btnUpgrade = document.getElementById('btnUpgrade');
-  const form = document.getElementById('expenseForm');
-  const btnClear = document.getElementById('btnClear');
+  const form       = document.getElementById('expenseForm');
+  const btnClear   = document.getElementById('btnClear');
   const perPageSelect = document.getElementById('perPage');
-  
-const leaderboardSection = document.getElementById('leaderboardSection');
+  const leaderboardSection = document.getElementById('leaderboardSection');
 
-const dateEl = document.getElementById('date');
-if (dateEl) {
-  const openPicker = () => dateEl.showPicker && dateEl.showPicker();
-  dateEl.addEventListener('focus', openPicker);
-  dateEl.addEventListener('click', openPicker);
-  dateEl.addEventListener('keydown', (e) => {
-    
-    if (!['Tab','Shift','Escape','Enter'].includes(e.key)) openPicker();
-  });
-}
-
-
-function updatePremiumUI(isPremium) {
-  setUserBadge(isPremium);
-  btnExport.disabled = !isPremium;
-  if (leaderboardSection) {
-    leaderboardSection.style.display = isPremium ? '' : 'none';
+  // ------- date picker (desktop convenience) -------
+  const dateEl = document.getElementById('date');
+  if (dateEl) {
+    const openPicker = () => dateEl.showPicker && dateEl.showPicker();
+    dateEl.addEventListener('focus', openPicker);
+    dateEl.addEventListener('click', openPicker);
+    dateEl.addEventListener('keydown', (e) => {
+      if (!['Tab','Shift','Escape','Enter'].includes(e.key)) openPicker();
+    });
   }
-}
 
-  let page = 1;
-  let limit = parseInt(perPageSelect.value, 10);
+  // ------- UI helpers -------
+  function updatePremiumUI(isPremium) {
+    setUserBadge(isPremium);
+    if (btnExport) btnExport.disabled = !isPremium;
+    if (leaderboardSection) leaderboardSection.style.display = isPremium ? '' : 'none';
+  }
 
-  const isPremium = localStorage.getItem('isPremium') === '1';
-  setUserBadge(isPremium);
-  btnExport.disabled = !isPremium;
+  // Initial premium state from localStorage
+  let isPremium = localStorage.getItem('isPremium') === '1';
+  updatePremiumUI(isPremium);
 
-  btnLogout.addEventListener('click', () => {
+  // ------- state for pagination -------
+  let page  = 1;
+  let limit = perPageSelect ? parseInt(perPageSelect.value, 10) : 5;
+
+  // ------- auth actions -------
+  btnLogout?.addEventListener('click', () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     localStorage.removeItem('isPremium');
     window.location.href = './index.html';
   });
-btnUpgrade.addEventListener('click', async () => {
-  try {
-    const tokenHeader = authHeader();
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/subscription/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...tokenHeader },
-      body: JSON.stringify({ plan: 'premium_199', amount: 199.00, currency: 'INR' }),
+
+  // ------- Cashfree helpers -------
+  async function loadCashfreeSDK() {
+    if (window.Cashfree) return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
     });
-    const data = await res.json();
-
-    if (!data.success) {
-      alert(data.message || 'Failed to start payment.');
-      return;
-    }
-
-    if (data.payment_session_id && window.Cashfree) {
-      const mode = 'sandbox'; 
-      const cashfree = window.Cashfree({ mode });
-
-  
-      await cashfree.checkout({
-        paymentSessionId: data.payment_session_id,
-        
-      });
-
-    
-      return;
-    }
-
-    
-    if (data.payment_link) {
-      window.location.href = data.payment_link;
-      return;
-    }
-
-    alert('Payment init failed (no session id / payment link).');
-  } catch (e) {
-    console.error(e);
-    alert('Error starting payment.');
   }
-});
 
+  async function pollOrderStatus(orderId, timeoutMs = 120000, intervalMs = 3000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const r = await fetch(
+        `${window.APP_CONFIG.API_BASE_URL}/api/subscription/status?order_id=${encodeURIComponent(orderId)}`,
+        { headers: { ...authHeader() } }
+      );
+      const d = await r.json().catch(() => ({}));
+      if (d?.success && (d.status === 'PAID' || d.status === 'SUCCESS')) {
+        return true;
+      }
+      await new Promise(res => setTimeout(res, intervalMs));
+    }
+    return false;
+  }
 
-  btnExport.addEventListener('click', async () => {
-    const tokenHeader = authHeader();
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/export/csv', {
-      headers: { ...tokenHeader },
+  // ------- Go Premium -------
+  btnUpgrade?.addEventListener('click', async () => {
+    try {
+      const res = await fetch(
+        `${window.APP_CONFIG.API_BASE_URL}/api/subscription/create-order`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify({ plan: 'premium_199', amount: 199.00, currency: 'INR' }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        alert(data?.message || 'Failed to start payment.');
+        return;
+      }
+
+      // Prefer session checkout
+      if (data.payment_session_id) {
+        await loadCashfreeSDK();
+        const mode = (window.APP_CONFIG?.CF_MODE || 'sandbox'); // 'sandbox' or 'production'
+        const cashfree = new Cashfree({ mode });
+
+        // Open Cashfree checkout
+        await cashfree.checkout({ paymentSessionId: data.payment_session_id });
+
+        // After user finishes/returns, poll for final status
+        if (data.order_id) {
+          const ok = await pollOrderStatus(data.order_id);
+          if (ok) {
+            // Refresh premium flag from server and update UI
+            await syncPremiumFromServer();
+            alert('Payment success. Premium unlocked!');
+            return;
+          }
+        }
+
+        // Fallback: do a quick sync even if polling didn’t confirm
+        await syncPremiumFromServer();
+        alert('If payment was successful, premium will unlock shortly.');
+        return;
+      }
+
+      // Fallback: hosted payment link
+      if (data.payment_link) {
+        window.location.href = data.payment_link;
+        return;
+      }
+
+      alert('Payment init failed (no session id / payment link).');
+    } catch (e) {
+      console.error(e);
+      alert('Error starting payment.');
+    }
+  });
+
+  // ------- Export -------
+  btnExport?.addEventListener('click', async () => {
+    const res = await fetch(`${window.APP_CONFIG.API_BASE_URL}/api/export/csv`, {
+      headers: { ...authHeader() },
     });
     if (res.status === 403) {
       alert('Premium required to export.');
@@ -105,18 +148,21 @@ btnUpgrade.addEventListener('click', async () => {
     URL.revokeObjectURL(url);
   });
 
-  perPageSelect.addEventListener('change', () => {
-    limit = parseInt(perPageSelect.value, 10);
+  // ------- Per page -------
+  perPageSelect?.addEventListener('change', () => {
+    limit = parseInt(perPageSelect.value, 10) || 5;
     page = 1;
     loadExpenses();
   });
 
-  btnClear.addEventListener('click', () => {
-    form.reset();
-    document.getElementById('expenseId').value = '';
+  // ------- Form actions -------
+  btnClear?.addEventListener('click', () => {
+    form?.reset();
+    const idEl = document.getElementById('expenseId');
+    if (idEl) idEl.value = '';
   });
 
-  form.addEventListener('submit', async (e) => {
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('expenseId').value;
     const payload = {
@@ -125,11 +171,12 @@ btnUpgrade.addEventListener('click', async () => {
       amount: parseFloat(document.getElementById('amount').value),
       date: document.getElementById('date').value
     };
-    const tokenHeader = authHeader();
-    const url = window.APP_CONFIG.API_BASE_URL + '/api/expenses' + (id ? '/' + id : '');
+    const url = `${window.APP_CONFIG.API_BASE_URL}/api/expenses${id ? '/' + id : ''}`;
     const method = id ? 'PUT' : 'POST';
     const res = await fetch(url, {
-      method, headers: { 'Content-Type': 'application/json', ...tokenHeader }, body: JSON.stringify(payload)
+      method,
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     document.getElementById('formMsg').textContent = data.message || (data.success ? 'Saved!' : 'Failed');
@@ -141,11 +188,12 @@ btnUpgrade.addEventListener('click', async () => {
     }
   });
 
+  // ------- Expenses -------
   async function loadExpenses() {
-    const tokenHeader = authHeader();
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + `/api/expenses?page=${page}&limit=${limit}`, {
-      headers: { ...tokenHeader }
-    });
+    const res = await fetch(
+      `${window.APP_CONFIG.API_BASE_URL}/api/expenses?page=${page}&limit=${limit}`,
+      { headers: { ...authHeader() } }
+    );
     const data = await res.json();
     const tbody = document.querySelector('#expenseTable tbody');
     tbody.innerHTML = '';
@@ -168,9 +216,12 @@ btnUpgrade.addEventListener('click', async () => {
       }
       renderPagination(data.total, data.page, data.pageCount);
     }
-    
-    tbody.querySelectorAll('button[data-edit]').forEach(btn => btn.addEventListener('click', () => editExpense(btn.dataset.edit)));
-    tbody.querySelectorAll('button[data-del]').forEach(btn => btn.addEventListener('click', () => deleteExpense(btn.dataset.del)));
+    tbody.querySelectorAll('button[data-edit]').forEach(btn =>
+      btn.addEventListener('click', () => editExpense(btn.dataset.edit))
+    );
+    tbody.querySelectorAll('button[data-del]').forEach(btn =>
+      btn.addEventListener('click', () => deleteExpense(btn.dataset.del))
+    );
   }
 
   function renderPagination(total, current, pages) {
@@ -178,20 +229,22 @@ btnUpgrade.addEventListener('click', async () => {
     const containerBottom = document.getElementById('paginationBottom');
     containerTop.innerHTML = '';
     containerBottom.innerHTML = '';
-    function add(container, p) {
+    const add = (container, p) => {
       const b = document.createElement('button');
       b.textContent = p;
       if (p === current) b.disabled = true;
       b.addEventListener('click', () => { page = p; loadExpenses(); });
       container.appendChild(b);
-    }
+    };
     for (let p = 1; p <= pages; p++) add(containerTop, p);
     for (let p = 1; p <= pages; p++) add(containerBottom, p);
   }
 
   async function editExpense(id) {
-    const tokenHeader = authHeader();
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/expenses?id=' + id, { headers: { ...tokenHeader } });
+    const res = await fetch(
+      `${window.APP_CONFIG.API_BASE_URL}/api/expenses?id=${id}`,
+      { headers: { ...authHeader() } }
+    );
     const data = await res.json();
     if (data.success && data.items && data.items[0]) {
       const e = data.items[0];
@@ -206,54 +259,57 @@ btnUpgrade.addEventListener('click', async () => {
 
   async function deleteExpense(id) {
     if (!confirm('Delete this expense?')) return;
-    const tokenHeader = authHeader();
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/expenses/' + id, {
-      method: 'DELETE', headers: { ...tokenHeader }
-    });
+    const res = await fetch(
+      `${window.APP_CONFIG.API_BASE_URL}/api/expenses/${id}`,
+      { method: 'DELETE', headers: { ...authHeader() } }
+    );
     const data = await res.json();
     if (data.success) { await loadExpenses(); await refreshLeaderboard(); }
     else alert(data.message || 'Delete failed.');
   }
 
-async function refreshLeaderboard() {
-  
-  if (localStorage.getItem('isPremium') !== '1') return;
+  // ------- Leaderboard -------
+  async function refreshLeaderboard() {
+    // only ask if premium
+    if (localStorage.getItem('isPremium') !== '1') return;
 
-  const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/stats/leaderboard', {
-    headers: { ...authHeader() }  
-  });
-  const data = await res.json();
-  const ol = document.getElementById('leaderboard');
-  ol.innerHTML = '';
-  if (data.success && Array.isArray(data.top)) {
-    for (const u of data.top) {
-      const li = document.createElement('li');
-      li.textContent = `${u.username} — ₹${parseFloat(u.total).toFixed(2)}`;
-      ol.appendChild(li);
-    }
-  }
-}
-
-
-  async function syncPremiumFromServer() {
-  try {
-    const res = await fetch(window.APP_CONFIG.API_BASE_URL + '/api/auth/me', {
+    const res = await fetch(`${window.APP_CONFIG.API_BASE_URL}/api/stats/leaderboard`, {
       headers: { ...authHeader() }
     });
     const data = await res.json();
-    if (data.success) {
-      localStorage.setItem('isPremium', data.isPremium ? '1' : '0');
-      setUserBadge(data.isPremium);
-      btnExport.disabled = !data.isPremium;
+    const ol = document.getElementById('leaderboard');
+    ol.innerHTML = '';
+    if (data.success && Array.isArray(data.top)) {
+      for (const u of data.top) {
+        const li = document.createElement('li');
+        li.textContent = `${u.username} — ₹${parseFloat(u.total).toFixed(2)}`;
+        ol.appendChild(li);
+      }
     }
-  } catch {}
-}
+  }
 
+  // ------- Sync premium flag from server -------
+  async function syncPremiumFromServer() {
+    try {
+      const res = await fetch(`${window.APP_CONFIG.API_BASE_URL}/api/auth/me`, {
+        headers: { ...authHeader() }
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('isPremium', data.isPremium ? '1' : '0');
+        updatePremiumUI(data.isPremium);
+        if (data.isPremium) refreshLeaderboard();
+      }
+    } catch {}
+  }
 
-
-  
+  // Initial loads
   syncPremiumFromServer();
   loadExpenses();
   refreshLeaderboard();
+
+  // Periodic updates
   setInterval(refreshLeaderboard, 10000);
+  // Optionally also keep premium flag fresh:
+  // setInterval(syncPremiumFromServer, 15000);
 });
