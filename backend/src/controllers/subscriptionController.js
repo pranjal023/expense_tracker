@@ -4,28 +4,49 @@ import { v4 as uuid } from 'uuid';
 
 export async function createOrder(req, res) {
   try {
-    const userId = req.user.id;
-    const { amount=199.00, currency='INR' } = req.body || {};
-    const orderId = 'ord_' + uuid().replace(/-/g, '').slice(0,18);
-    const returnUrl = (process.env.FRONTEND_BASE_URL || 'http://localhost:5500/frontend') + '/payment-result.html?order_id=' + orderId;
+    if (!req.user?.id) {
+      return res.status(401).json({ success:false, message:'Not authenticated' });
+    }
 
-    // create DB record first
-    await pool.query('INSERT INTO orders (user_id, order_id, status, amount, currency) VALUES (?,?,?,?,?)', [userId, orderId, 'CREATED', amount, currency]);
+    const userId = req.user.id;
+    const { amount = 199.00, currency = 'INR' } = req.body || {};
+    const orderId = 'ord_' + uuid().replace(/-/g, '').slice(0,18);
+    const returnUrl = (process.env.FRONTEND_BASE_URL || 'http://localhost:5500/frontend')
+      + '/payment-result.html?order_id=' + orderId;
+
+   
+    await pool.query(
+      'INSERT INTO orders (user_id, order_id, amount, status) VALUES (?,?,?,?)',
+      [userId, orderId, amount, 'CREATED']
+    );
 
     const resp = await createCashfreeOrder({ orderId, amount, currency, returnUrl, userId });
-    if (!resp.ok) {
-      return res.status(500).json({ success:false, message: resp.message || 'Cashfree order failed' });
+
+    if (!resp?.ok) {
+      console.error('Cashfree create order failed:', resp);
+      return res.status(502).json({
+        success: false,
+        message: resp?.message || 'Cashfree order failed'
+      });
     }
-    // store status if present
+
     if (resp.data?.order_status) {
-      await pool.query('UPDATE orders SET status=? WHERE order_id=?', [resp.data.order_status, orderId]);
+      await pool.query('UPDATE orders SET status=? WHERE order_id=?',
+        [resp.data.order_status.toUpperCase(), orderId]);
     }
-    res.json({ success:true, order_id: orderId, payment_link: resp.data?.payment_link || null, payment_session_id: resp.data?.payment_session_id || null });
+
+    return res.json({
+      success:true,
+      order_id: orderId,
+      payment_link: resp.data?.payment_link || null,
+      payment_session_id: resp.data?.payment_session_id || null
+    });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ success:false, message:'Failed to create order' });
+    console.error('createOrder error:', e);
+    return res.status(500).json({ success:false, message:'Failed to create order' });
   }
 }
+
 
 export async function getStatus(req, res) {
   try {
