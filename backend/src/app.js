@@ -14,28 +14,35 @@ dotenv.config();
 const app = express();
 
 /* ---------- CORS (single block, first) ---------- */
-const allowedOrigins = (process.env.CORS_ORIGIN || '')
+const normalize = (s) => (s || '').trim().replace(/\/$/, '');
+
+const allowlist = (process.env.CORS_ORIGIN || '')
   .split(',')
-  .map(s => s.trim())
+  .map(normalize)
   .filter(Boolean);
+
+// helpful once at boot
+console.log('CORS allowlist:', allowlist);
 
 const corsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true); // allow curl/postman
-    if (!allowedOrigins.length || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS'));
+    if (!origin) return cb(null, true);            // curl/postman
+    const o = normalize(origin);
+    const ok = allowlist.length === 0 || allowlist.includes(o);
+
+    // IMPORTANT: don't throw; returning false avoids 5xx on preflight
+    return cb(null, ok);
   },
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
   credentials: false,
   optionsSuccessStatus: 204,
 };
+
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 /* ----------------------------------------------- */
 
-/* If you need raw body for Cashfree, put this route
-   BEFORE the global JSON parser so raw body is available. */
 app.post('/api/subscription/cashfree-webhook', express.raw({ type: '*/*' }), async (req,res) => {
   try {
     const body = req.body.toString('utf8');
