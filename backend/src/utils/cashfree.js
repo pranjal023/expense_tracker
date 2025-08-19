@@ -12,7 +12,7 @@ async function createOrderApi({ orderId, amount,  returnUrl, customer }) {
   const headers = {
     'x-client-id': process.env.CASHFREE_CLIENT_ID || '',
     'x-client-secret': process.env.CASHFREE_CLIENT_SECRET || '',
-    'x-api-version': '2025-01-01',
+    'x-api-version': '2022-09-01',
     'Content-Type': 'application/json'
   };
   const body = {
@@ -66,8 +66,8 @@ async function fetchOrderApi(orderId) {
   }
   const resp = await fetch(url, { headers });
   const data = await resp.json().catch(()=> ({}));
-  if (!resp.ok) return { ok:false, message: 'Cashfree fetch order failed', data };
-  return { ok:true, data };
+  if (!resp.ok) return { ok: false, message: 'Cashfree fetch order failed', data };
+  return { ok :true, data };
 }
 
 export async function createCashfreeOrder({ orderId, amount,  returnUrl, userId }) {
