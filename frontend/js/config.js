@@ -1,4 +1,7 @@
 
+const isProd = location.hostname.endsWith('netlify.app') || location.hostname.endsWith('yourdomain.com');
 window.APP_CONFIG = {
-  API_BASE_URL: localStorage.getItem('API_BASE_URL') || 'http://localhost:3000',
+  API_BASE_URL: isProd
+    ? "expensetracker-production-3265.up.railway.app"
+    : "http://localhost:3000"
 };
