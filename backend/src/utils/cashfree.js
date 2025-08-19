@@ -7,7 +7,7 @@ function baseUrl() {
   return env === 'prod' || env === 'production' ? 'https://api.cashfree.com' : 'https://sandbox.cashfree.com';
 }
 
-async function createOrderApi({ orderId, amount, currency, returnUrl, customer }) {
+async function createOrderApi({ orderId, amount,  returnUrl, customer }) {
   const url = baseUrl() + '/pg/orders';
   const headers = {
     'x-client-id': process.env.CASHFREE_CLIENT_ID || '',
@@ -18,7 +18,7 @@ async function createOrderApi({ orderId, amount, currency, returnUrl, customer }
   const body = {
     order_id: orderId,
     order_amount: Number(amount),
-    order_currency: currency,
+    
     customer_details: {
       customer_id: customer?.id || 'cust_' + orderId.slice(-6),
       customer_email: customer?.email || 'customer@example.com',
@@ -49,7 +49,7 @@ async function createOrderApi({ orderId, amount, currency, returnUrl, customer }
   if (!resp.ok) {
     return { ok:false, message: data?.message || 'Cashfree create order failed', data };
   }
-  return { ok:true, data };
+  return { ok: true, data };
 }
 
 async function fetchOrderApi(orderId) {
@@ -70,9 +70,9 @@ async function fetchOrderApi(orderId) {
   return { ok:true, data };
 }
 
-export async function createCashfreeOrder({ orderId, amount, currency, returnUrl, userId }) {
+export async function createCashfreeOrder({ orderId, amount,  returnUrl, userId }) {
   
-  return await createOrderApi({ orderId, amount, currency, returnUrl, customer: { id: 'user_'+userId } });
+  return await createOrderApi({ orderId, amount, returnUrl, customer: { id: 'user_'+userId } });
 }
 
 export async function fetchCashfreeOrder(orderId) {
