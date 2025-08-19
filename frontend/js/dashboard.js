@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePremiumUI(isPremium) {
     setUserBadge(isPremium);
     if (btnExport) btnExport.disabled = !isPremium;
-    if (leaderboardSection) leaderboardSection.style.display = isPremium ? '' : 'none';
+    if (leaderboardSection) leaderboardSection.style.display = isPremium ? '': 'none';
   }
 
   // Initial premium state from localStorage
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify({ plan: 'premium_199', amount: 199.00, currency: 'INR' }),
+          body: JSON.stringify({ plan: 'premium_199', amount: 199.00 }),
         }
       );
 
