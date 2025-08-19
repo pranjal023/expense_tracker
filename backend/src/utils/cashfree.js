@@ -31,7 +31,7 @@ async function createOrderApi({ orderId, amount,  returnUrl, customer }) {
     order_note: 'Expense Tracker Premium'
   };
 
-  v
+  
   if (!headers['x-client-id'] || !headers['x-client-secret']) {
     return {
       ok: true,
