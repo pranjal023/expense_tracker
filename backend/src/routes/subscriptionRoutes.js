@@ -6,7 +6,7 @@ const router = Router();
 
 
 router.post('/create-order', requireAuth, createOrder);
-router.get('/status', requireAuth, getStatus);
+router.get('/status', getStatus);
 
 
 export default router;
