@@ -7,7 +7,7 @@ function baseUrl() {
   const env = (process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
   return (env === 'prod' || env === 'production')
     ? 'https://api.cashfree.com'
-    : 'https://sandbox.cashfree.com/pg';
+    : 'https://sandbox.cashfree.com';
 }
 
 async function createOrderApi({ orderId, amount, currency = 'INR', returnUrl, customer }) {
