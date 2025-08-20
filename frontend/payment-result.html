@@ -9,7 +9,9 @@
   <script defer>
     document.addEventListener('DOMContentLoaded', async () => {
       const params = new URLSearchParams(window.location.search);
-      const orderId = params.get('order_id');
+      const orderId = params.get('order_id') ||
+    params.get('cf_order_id') ||
+    params.get('orderId');;
       const msg = document.getElementById('resultMsg');
       if (!orderId) {
         msg.textContent = 'Missing order id.';
