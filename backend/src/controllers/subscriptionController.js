@@ -5,11 +5,22 @@ import { v4 as uuid } from 'uuid';
 
 export async function createOrder(req, res) {
   try {
-    if (!req.user?.id) {
+    if (!req. user?.id) {
       return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
 
     const userId = req.user.id;
+
+    const [[user]] = await pool.query(
+      'SELECT is_premium FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    );
+    if (user?.is_premium) {
+      return res.status(409).json({
+        success: false,
+        message: 'You are already a Premium user.'
+      });
+    }
     const { amount = 199.00, currency = 'INR' } = req.body ?? {};
 
     // basic validation
