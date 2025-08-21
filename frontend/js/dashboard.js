@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnExport) btnExport.disabled = !isPremium;
 
     if (btnUpgrade) {
-      btnUpgrade.textContent = isPremium ? 'Premium ✓' : 'Go Premium';
+      btnUpgrade.textContent = isPremium ? ' You are now Premium user✓': 'Go Premium';
       btnUpgrade.disabled = !!isPremium;
       btnUpgrade.classList.toggle('btn-disabled', !!isPremium);
       btnUpgrade.setAttribute('aria-disabled', isPremium ? 'true' : 'false');
