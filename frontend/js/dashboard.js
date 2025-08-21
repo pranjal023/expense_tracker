@@ -26,7 +26,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePremiumUI(isPremium) {
     setUserBadge(isPremium);
     if (btnExport) btnExport.disabled = !isPremium;
-    if (leaderboardSection) leaderboardSection.style.display = isPremium ? '': 'none';
+
+    if (btnUpgrade) {
+      btnUpgrade.textContent = isPremium ? 'Premium ✓' : 'Go Premium';
+      btnUpgrade.disabled = !!isPremium;
+      btnUpgrade.classList.toggle('btn-disabled', !!isPremium);
+      btnUpgrade.setAttribute('aria-disabled', isPremium ? 'true' : 'false');
+    }
+
+    if (leaderboardSection) {
+      leaderboardSection.style.display = isPremium ? '' : 'none';
+    }
   }
 
   // Initial premium state from localStorage
@@ -62,12 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
     while (Date.now() - start < timeoutMs) {
       const r = await fetch(
         `${window.APP_CONFIG.API_BASE_URL}/api/subscription/status?order_id=${encodeURIComponent(orderId)}`,
-        { headers: { ...authHeader() } }
+        { headers: { ...authHeader() } } // status can be public; auth header doesn't hurt
       );
       const d = await r.json().catch(() => ({}));
-      if (d?.success && (d.status === 'PAID' || d.status === 'SUCCESS')) {
-        return true;
-      }
+      if (d?.success && (d.status === 'PAID' || d.status === 'SUCCESS')) return true;
       await new Promise(res => setTimeout(res, intervalMs));
     }
     return false;
@@ -75,6 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ------- Go Premium -------
   btnUpgrade?.addEventListener('click', async () => {
+    // Already premium? Don’t start payment.
+    if (localStorage.getItem('isPremium') === '1') {
+      alert("You're already Premium. Thanks!");
+      return;
+    }
+    // Prevent double-clicks
+    if (btnUpgrade.disabled) return;
+    btnUpgrade.disabled = true;
+    const originalText = btnUpgrade.textContent;
+    btnUpgrade.textContent = 'Opening…';
+
     try {
       const res = await fetch(
         `${window.APP_CONFIG.API_BASE_URL}/api/subscription/create-order`,
@@ -94,24 +113,22 @@ document.addEventListener('DOMContentLoaded', () => {
       // Prefer session checkout
       if (data.payment_session_id) {
         await loadCashfreeSDK();
-        const mode = (window.APP_CONFIG?.CF_MODE || 'sandbox'); // 'sandbox' or 'production'
-        const cashfree = new Cashfree({ mode });
+        const cashfree = window.Cashfree({
+          mode: (window.APP_CONFIG?.CF_MODE || 'sandbox') // 'sandbox' or 'production'
+        });
 
-        // Open Cashfree checkout
         await cashfree.checkout({ paymentSessionId: data.payment_session_id });
 
-        // After user finishes/returns, poll for final status
+        // After return, poll backend for final status
         if (data.order_id) {
           const ok = await pollOrderStatus(data.order_id);
           if (ok) {
-            // Refresh premium flag from server and update UI
             await syncPremiumFromServer();
             alert('Payment success. Premium unlocked!');
             return;
           }
         }
-
-        // Fallback: do a quick sync even if polling didn’t confirm
+        // Fallback sync
         await syncPremiumFromServer();
         alert('If payment was successful, premium will unlock shortly.');
         return;
@@ -127,6 +144,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error(e);
       alert('Error starting payment.');
+    } finally {
+      // Keep button disabled if user became premium
+      const nowPremium = localStorage.getItem('isPremium') === '1';
+      updatePremiumUI(nowPremium);
+      if (!nowPremium) {
+        btnUpgrade.disabled = false;
+        btnUpgrade.textContent = originalText;
+      }
     }
   });
 
@@ -270,9 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ------- Leaderboard -------
   async function refreshLeaderboard() {
-    // only ask if premium
     if (localStorage.getItem('isPremium') !== '1') return;
-
     const res = await fetch(`${window.APP_CONFIG.API_BASE_URL}/api/stats/leaderboard`, {
       headers: { ...authHeader() }
     });
